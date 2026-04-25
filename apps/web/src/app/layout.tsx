@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 
+import { SessionProvider } from "@/components/layout/SessionProvider";
 import { ThemeProvider } from "@/components/layout/ThemeProvider";
 import { Toaster } from "@/components/ui/toaster";
 import "./globals.css";
@@ -7,7 +8,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Admin Dashboard",
   description: "Dashboard pessoal — crypto, news e mais",
-  robots: { index: false, follow: false }, // privado
+  robots: { index: false, follow: false },
 };
 
 export default function RootLayout({
@@ -24,7 +25,7 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          {children}
+          <SessionProvider>{children}</SessionProvider>
           <Toaster />
         </ThemeProvider>
       </body>

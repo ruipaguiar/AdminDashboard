@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LogOut, Menu, Settings, User } from "lucide-react";
+import { signOut, useSession } from "next-auth/react";
 
 import { dashboardNavigation } from "@/components/layout/navigation";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
@@ -25,9 +26,24 @@ function getCurrentSection(pathname: string) {
   );
 }
 
+function getInitials(name: string): string {
+  return name
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2);
+}
+
 export function Header() {
   const pathname = usePathname();
   const currentSection = getCurrentSection(pathname);
+  const { data: session } = useSession();
+
+  const displayName = session?.user?.displayName ?? session?.user?.name ?? "Utilizador";
+  const email = session?.user?.email ?? "";
+  const role = session?.user?.role ?? "User";
+  const initials = getInitials(displayName);
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b bg-background/95 px-4 backdrop-blur supports-[backdrop-filter]:bg-background/70 sm:px-6">
@@ -83,15 +99,15 @@ export function Header() {
               aria-label="Abrir menu de utilizador"
             >
               <Avatar className="size-8">
-                <AvatarFallback>RA</AvatarFallback>
+                <AvatarFallback>{initials}</AvatarFallback>
               </Avatar>
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-56">
             <DropdownMenuLabel>
-              <span className="block text-sm">Rui Aguiar</span>
+              <span className="block text-sm">{displayName}</span>
               <span className="block text-xs font-normal text-muted-foreground">
-                Administrador
+                {email || role}
               </span>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
@@ -106,7 +122,10 @@ export function Header() {
               Perfil
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem disabled>
+            <DropdownMenuItem
+              onClick={() => signOut({ callbackUrl: "/login" })}
+              className="text-destructive focus:text-destructive"
+            >
               <LogOut className="size-4" />
               Terminar sessão
             </DropdownMenuItem>

@@ -1,8 +1,7 @@
 import { redirect } from "next/navigation";
+import { auth } from "@/lib/auth";
 
-export default function HomePage() {
-  // TODO: quando NextAuth estiver setup, verificar sessão aqui.
-  // Se autenticado → redirect para /crypto (módulo default).
-  // Se não → redirect para /login.
-  redirect("/login");
+export default async function HomePage() {
+  const session = await auth();
+  redirect(session ? "/crypto" : "/login");
 }

@@ -1,8 +1,9 @@
 import axios from "axios";
+import { getSession } from "next-auth/react";
 
 /**
  * Cliente HTTP para chamadas client-side à API.
- * Como o Next.js faz rewrite de /api/* → API C#, o baseURL é só "/api".
+ * O Next.js faz rewrite de /api/* → API C# (via next.config.ts).
  */
 export const api = axios.create({
   baseURL: "/api",
@@ -11,18 +12,19 @@ export const api = axios.create({
   },
 });
 
-// Interceptor para adicionar JWT do NextAuth quando disponível
 api.interceptors.request.use(async (config) => {
-  // TODO: integrar com NextAuth getSession() quando estiver implementado
+  const session = await getSession();
+  if (session?.accessToken) {
+    config.headers.Authorization = `Bearer ${session.accessToken}`;
+  }
   return config;
 });
 
-// Interceptor para tratar 401 → logout
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // TODO: redirect para /login
+      window.location.href = "/login";
     }
     return Promise.reject(error);
   }

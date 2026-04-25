@@ -28,6 +28,9 @@
     <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.0" />
     <PackageReference Include="System.ServiceModel.Syndication" Version="10.0.0" />
 
+    <!-- JWT token generation -->
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.*" />
+
     <!-- Hashing de passwords -->
     <PackageReference Include="BCrypt.Net-Next" Version="4.0.*" />
   </ItemGroup>

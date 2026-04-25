@@ -1,5 +1,11 @@
 using System.Text;
+using AdminDashboard.Api.Common.Middleware;
+using AdminDashboard.Core.Interfaces;
+using AdminDashboard.Core.Validators;
+using AdminDashboard.Infra.External;
 using AdminDashboard.Infra.Persistence;
+using FluentValidation;
+using FluentValidation.AspNetCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -9,7 +15,7 @@ using Serilog;
 var builder = WebApplication.CreateBuilder(args);
 
 // ──────────────────────────────────────────────────────────
-// Logging — Serilog para output estruturado
+// Logging — Serilog
 // ──────────────────────────────────────────────────────────
 builder.Host.UseSerilog((ctx, lc) => lc
     .ReadFrom.Configuration(ctx.Configuration)
@@ -25,7 +31,7 @@ builder.Services.AddOpenApi();
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
-// JWT Authentication
+// JWT Authentication — MapInboundClaims=false mantém "sub" como "sub" (sem mapping para URI)
 var jwtSecret = builder.Configuration["Jwt:Secret"]
     ?? throw new InvalidOperationException("Jwt:Secret não configurado");
 var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "AdminDashboard";
@@ -34,6 +40,7 @@ var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "AdminDashboard";
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
+        options.MapInboundClaims = false;
         options.TokenValidationParameters = new TokenValidationParameters
         {
             ValidateIssuer = true,
@@ -42,7 +49,9 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ValidateIssuerSigningKey = true,
             ValidIssuer = jwtIssuer,
             ValidAudience = jwtAudience,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret))
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecret)),
+            NameClaimType = "sub",
+            RoleClaimType = "role",
         };
     });
 
@@ -61,6 +70,13 @@ builder.Services.AddCors(options =>
               .AllowCredentials());
 });
 
+// FluentValidation — auto-valida models nos controllers
+builder.Services.AddFluentValidationAutoValidation();
+builder.Services.AddValidatorsFromAssemblyContaining<LoginRequestValidator>();
+
+// Módulo Auth
+builder.Services.AddScoped<IAuthService, AuthService>();
+
 // TODO: registar serviços dos módulos (Crypto, News, Chat) — ver prompts/
 
 var app = builder.Build();
@@ -68,11 +84,12 @@ var app = builder.Build();
 // ──────────────────────────────────────────────────────────
 // Pipeline
 // ──────────────────────────────────────────────────────────
+app.UseMiddleware<ExceptionHandlingMiddleware>();
+
 app.UseSerilogRequestLogging();
 
 if (app.Environment.IsDevelopment() || app.Environment.IsProduction())
 {
-    // OpenAPI / Scalar (UI moderna em vez de Swagger UI)
     app.MapOpenApi();
     app.MapScalarApiReference("/docs", options =>
     {
@@ -87,7 +104,6 @@ app.UseAuthorization();
 
 app.MapControllers();
 
-// Health check endpoint (usado pelo Dockerfile HEALTHCHECK)
 app.MapGet("/health", () => Results.Ok(new
 {
     status = "healthy",
@@ -95,18 +111,19 @@ app.MapGet("/health", () => Results.Ok(new
     version = "1.0.0"
 })).AllowAnonymous();
 
+// Aplicar migrations na startup
 using (var scope = app.Services.CreateScope())
 {
     var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
-
     try
     {
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         await db.Database.MigrateAsync();
+        logger.LogInformation("Migrations aplicadas com sucesso.");
     }
     catch (Exception ex)
     {
-        logger.LogCritical(ex, "Failed to apply database migrations at startup.");
+        logger.LogCritical(ex, "Falha ao aplicar migrations na startup.");
         throw;
     }
 }

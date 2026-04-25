@@ -2,6 +2,8 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { LockKeyhole, LogIn, Mail } from "lucide-react";
+import { signIn } from "next-auth/react";
+import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
@@ -31,19 +33,28 @@ const loginSchema = z.object({
 type LoginFormValues = z.infer<typeof loginSchema>;
 
 export default function LoginPage() {
+  const router = useRouter();
+
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
-    defaultValues: {
-      email: "",
-      password: "",
-    },
+    defaultValues: { email: "", password: "" },
   });
 
-  async function onSubmit() {
-    await new Promise((resolve) => setTimeout(resolve, 350));
-    form.setError("root", {
-      message: "Não foi possível iniciar sessão com estes dados.",
+  async function onSubmit(values: LoginFormValues) {
+    const result = await signIn("credentials", {
+      email: values.email,
+      password: values.password,
+      redirect: false,
     });
+
+    if (result?.error) {
+      form.setError("root", {
+        message: "Email ou password incorretos.",
+      });
+    } else {
+      router.push("/crypto");
+      router.refresh();
+    }
   }
 
   return (
