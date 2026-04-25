@@ -95,12 +95,20 @@ app.MapGet("/health", () => Results.Ok(new
     version = "1.0.0"
 })).AllowAnonymous();
 
-// Aplicar migrations automaticamente (development apenas)
-if (app.Environment.IsDevelopment())
+using (var scope = app.Services.CreateScope())
 {
-    using var scope = app.Services.CreateScope();
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    await db.Database.MigrateAsync();
+    var logger = scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("Startup");
+
+    try
+    {
+        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+        await db.Database.MigrateAsync();
+    }
+    catch (Exception ex)
+    {
+        logger.LogCritical(ex, "Failed to apply database migrations at startup.");
+        throw;
+    }
 }
 
 app.Run();

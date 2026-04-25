@@ -1,4 +1,7 @@
 import type { Metadata } from "next";
+
+import { ThemeProvider } from "@/components/layout/ThemeProvider";
+import { Toaster } from "@/components/ui/toaster";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -14,8 +17,16 @@ export default function RootLayout({
 }) {
   return (
     <html lang="pt-PT" suppressHydrationWarning>
-      <body className="antialiased">
-        {children}
+      <body className="min-h-screen bg-background text-foreground antialiased">
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+        >
+          {children}
+          <Toaster />
+        </ThemeProvider>
       </body>
     </html>
   );
