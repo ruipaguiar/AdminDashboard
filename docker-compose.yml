@@ -1,0 +1,107 @@
+# AdminDashboard — Docker Compose
+#
+# Padrão segue o teu MelResin:
+#   - Imagens nomeadas (image: ...)
+#   - env_file para valores reais
+#   - environment para documentar
+#   - rede external (admin-net)
+#
+# Diferenças vs MelResin:
+#   - Ports usam prefix 127.0.0.1: (segurança — só localhost vê)
+#   - Frontend único (web), não há storefront/backoffice separados
+#   - Postgres é externo (reutiliza postgres-server da rede melresin-net)
+#
+# Uso:
+#   docker compose --env-file .env.prod up -d --build
+#   docker compose logs -f api
+#   docker compose down
+
+name: admin
+
+services:
+  # ──────────────────────────────────────────────────────────
+  # API — ASP.NET Core .NET 10
+  # ──────────────────────────────────────────────────────────
+  api:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: admin-api:latest
+    container_name: admin-api
+    restart: unless-stopped
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      ASPNETCORE_URLS: http://+:8080
+      APP_ENV: ${APP_ENV:-production}
+
+      # Connection string para o Postgres existente (postgres-server na melresin-net)
+      ConnectionStrings__DefaultConnection: "Host=${POSTGRES_HOST};Port=${POSTGRES_PORT};Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}"
+
+      # JWT
+      Jwt__Secret: ${JWT_SECRET}
+      Jwt__Issuer: ${JWT_ISSUER:-AdminDashboard}
+      Jwt__Audience: ${JWT_AUDIENCE:-AdminDashboard}
+      Jwt__ExpiryMinutes: ${JWT_EXPIRY_MINUTES:-1440}
+
+      # Binance (read-only)
+      Binance__ApiKey: ${BINANCE_API_KEY}
+      Binance__ApiSecret: ${BINANCE_API_SECRET}
+
+      # Anthropic (Claude)
+      Anthropic__ApiKey: ${ANTHROPIC_API_KEY}
+      Anthropic__Model: ${ANTHROPIC_MODEL:-claude-opus-4-7}
+
+      # CORS (não estritamente necessário porque Next.js faz rewrite, mas seguro)
+      Cors__AllowedOrigins: ${CORS_ALLOWED_ORIGINS:-https://admin.raguiar.pt}
+    env_file:
+      - .env.prod
+    ports:
+      # 127.0.0.1: garante que só localhost (e portanto cloudflared) acede
+      - "127.0.0.1:${API_PORT:-5001}:8080"
+    networks:
+      - admin-net
+      - melresin-net   # acesso ao postgres-server
+
+  # ──────────────────────────────────────────────────────────
+  # Web — Next.js 16.2 (frontend único)
+  # ──────────────────────────────────────────────────────────
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_APP_ENV: ${APP_ENV:-production}
+        NEXT_PUBLIC_API_VERSION: "1.0"
+    image: admin-web:latest
+    container_name: admin-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      NODE_ENV: production
+      # URL interna pela qual o Next.js (server-side) chama a API dentro da rede Docker
+      API_URL_INTERNAL: http://api:8080
+      # NextAuth
+      NEXTAUTH_URL: ${NEXTAUTH_URL:-https://admin.raguiar.pt}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET}
+      NEXT_PUBLIC_APP_ENV: ${APP_ENV:-production}
+    env_file:
+      - .env.prod
+    ports:
+      - "127.0.0.1:${WEB_PORT:-3003}:3000"
+    networks:
+      - admin-net
+
+# ──────────────────────────────────────────────────────────
+# Redes
+# ──────────────────────────────────────────────────────────
+networks:
+  # Rede privada deste projeto (web ↔ api)
+  admin-net:
+    external: true
+    name: admin-net
+
+  # Rede partilhada onde está o postgres-server (já existe)
+  melresin-net:
+    external: true
+    name: melresin-net

@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>AdminDashboard.Infra</RootNamespace>
+    <AssemblyName>AdminDashboard.Infra</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- EF Core + Postgres -->
+    <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.4" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.4">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.4" />
+    <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.*" />
+
+    <!-- Binance — SDK não-oficial mas de alta qualidade -->
+    <PackageReference Include="Binance.Net" Version="11.*" />
+
+    <!-- Anthropic Claude SDK -->
+    <PackageReference Include="Anthropic.SDK" Version="5.*" />
+
+    <!-- HTTP & RSS feeds para módulo News -->
+    <PackageReference Include="Microsoft.Extensions.Http" Version="10.0.0" />
+    <PackageReference Include="System.ServiceModel.Syndication" Version="10.0.0" />
+
+    <!-- Hashing de passwords -->
+    <PackageReference Include="BCrypt.Net-Next" Version="4.0.*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AdminDashboard.Core\AdminDashboard.Core.csproj" />
+  </ItemGroup>
+
+</Project>

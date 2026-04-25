@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>AdminDashboard.Core</RootNamespace>
+    <AssemblyName>AdminDashboard.Core</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Apenas dependências leves: Core não conhece infraestrutura -->
+    <PackageReference Include="FluentValidation" Version="11.11.*" />
+  </ItemGroup>
+
+</Project>

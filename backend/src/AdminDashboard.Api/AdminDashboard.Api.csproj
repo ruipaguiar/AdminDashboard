@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>AdminDashboard.Api</RootNamespace>
+    <AssemblyName>AdminDashboard.Api</AssemblyName>
+    <UserSecretsId>admindashboard-api-dev</UserSecretsId>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- ASP.NET Core / OpenAPI -->
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="10.0.0" />
+    <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="10.0.0" />
+    <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.4">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+    <PackageReference Include="Scalar.AspNetCore" Version="2.0.*" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+
+    <!-- Logging estruturado -->
+    <PackageReference Include="Serilog.AspNetCore" Version="9.0.*" />
+    <PackageReference Include="Serilog.Sinks.Console" Version="6.0.*" />
+
+    <!-- Validation -->
+    <PackageReference Include="FluentValidation.AspNetCore" Version="11.3.*" />
+
+    <!-- Background jobs (alertas de preço, polling Binance) -->
+    <PackageReference Include="Hangfire.AspNetCore" Version="1.8.*" />
+    <PackageReference Include="Hangfire.PostgreSql" Version="1.20.*" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AdminDashboard.Core\AdminDashboard.Core.csproj" />
+    <ProjectReference Include="..\AdminDashboard.Infra\AdminDashboard.Infra.csproj" />
+  </ItemGroup>
+
+</Project>
