@@ -1,44 +1,38 @@
 # Deploy — AdminDashboard
 
-Passos para fazer deploy do projeto no teu servidor Ubuntu.
+Passos para fazer deploy do projeto no servidor Ubuntu.
 
 ## Pré-requisitos no servidor
 
 - Ubuntu Server (já tens)
 - Docker e Docker Compose (já tens)
-- Container `postgres-server` a correr na rede `melresin-net` (já tens)
+- Postgres acessível via rede Docker (`postgres-server` na `melresin-net`)
 - Cloudflare Tunnel (`cloudflared`) configurado (já tens)
 - Domínio `raguiar.pt` na Cloudflare (já tens)
+
+---
 
 ## Passo 1 — Clonar o repositório
 
 ```bash
-cd ~/projetos    # ou onde tens os teus projetos
+cd ~/projetos
 git clone git@github.com:<teu-user>/AdminDashboard.git
 cd AdminDashboard
 ```
 
-## Passo 2 — Configurar a base de dados
+---
 
-Edita primeiro `scripts/setup-db.sql` e troca `ALTERA_PARA_PASSWORD_FORTE` por uma password gerada com:
+## Passo 2 — Base de dados
 
-```bash
-openssl rand -base64 32 | tr -d '/+=' | head -c 32
-```
+A BD `AdmindashBoard` e o user `printpro` já existem no servidor. Não é necessário correr o `setup-db.sql` novamente.
 
-Guarda essa password — vais precisar no próximo passo.
-
-Executa o script no Postgres existente:
+Se precisares de recriar do zero (novo servidor), edita `scripts/setup-db.sql` com as credenciais corretas e executa:
 
 ```bash
 docker exec -i postgres-server psql -U postgres < scripts/setup-db.sql
 ```
 
-Confirmar que a BD foi criada:
-
-```bash
-docker exec -it postgres-server psql -U postgres -l | grep admindashboard
-```
+---
 
 ## Passo 3 — Criar a rede Docker
 
@@ -52,31 +46,29 @@ Verifica:
 docker network ls | grep admin-net
 ```
 
+---
+
 ## Passo 4 — Configurar variáveis de ambiente
 
 ```bash
 cp .env.example .env.prod
-```
-
-Gera os secrets:
-
-```bash
-bash scripts/generate-secrets.sh
-```
-
-Edita `.env.prod`:
-
-```bash
 nano .env.prod
 ```
 
 Preenche:
 
-- `POSTGRES_PASSWORD` ← a mesma do passo 2
-- `JWT_SECRET` ← do gerador
-- `NEXTAUTH_SECRET` ← do gerador
-- `BINANCE_API_KEY` e `BINANCE_API_SECRET` ← criados em https://www.binance.com/en/my/settings/api-management (apenas Reading!)
-- `ANTHROPIC_API_KEY` ← criado em https://console.anthropic.com/settings/keys
+- `POSTGRES_HOST` → `postgres-server` (nome do container na rede Docker)
+- `POSTGRES_PORT` → `5432`
+- `POSTGRES_DB` → `AdmindashBoard`
+- `POSTGRES_USER` → `printpro`
+- `POSTGRES_PASSWORD` → a password real
+- `JWT_SECRET` → `openssl rand -base64 64`
+- `NEXTAUTH_SECRET` → `openssl rand -base64 64`
+- `NEXTAUTH_URL` → `https://admin.raguiar.pt`
+- `BINANCE_API_KEY` e `BINANCE_API_SECRET` → criados em binance.com (apenas Reading!)
+- `ANTHROPIC_API_KEY` → criado em console.anthropic.com
+
+---
 
 ## Passo 5 — Build e arrancar
 
@@ -84,13 +76,13 @@ Preenche:
 docker compose --env-file .env.prod up -d --build
 ```
 
-Vê os logs:
+Ver logs:
 
 ```bash
 docker compose logs -f
 ```
 
-Confirma que ambos os containers estão saudáveis:
+Confirmar containers saudáveis:
 
 ```bash
 docker compose ps
@@ -98,57 +90,37 @@ docker compose ps
 
 Devias ver `admin-api` e `admin-web` ambos com status `Up (healthy)`.
 
+**Nota:** As migrations (incluindo o seed do utilizador admin) são aplicadas automaticamente na startup da API.
+
+---
+
 ## Passo 6 — Configurar rota no Cloudflare Tunnel
 
-Vai a https://one.dash.cloudflare.com/ → Networks → Tunnels → o teu tunnel existente → Public Hostname → Add a public hostname.
-
-Preenche:
+Painel Cloudflare → Zero Trust → Networks → Tunnels → o teu tunnel → Public Hostname → Add:
 
 - **Subdomain:** `admin`
 - **Domain:** `raguiar.pt`
 - **Service:** Type `HTTP`, URL `localhost:3003`
-- **Additional application settings → HTTP Settings:**
-  - **HTTP Host Header:** `admin.raguiar.pt`
-  - **Origin Server Name:** (deixar vazio)
+- **HTTP Settings → HTTP Host Header:** `admin.raguiar.pt`
 
-Save.
+---
 
 ## Passo 7 — Testar
 
 ```bash
 # No servidor:
-curl http://localhost:3003                                # Next.js responde
-curl http://localhost:5001/api/health/ping                # API responde
+curl http://localhost:3003
+curl http://localhost:5001/api/health/ping
 
 # De qualquer lado:
-curl https://admin.raguiar.pt                              # via Cloudflare
-curl https://admin.raguiar.pt/api/health/ping              # rewrite via Next.js
+curl https://admin.raguiar.pt/api/health/ping
 ```
 
-Se tudo OK, vai ao browser: `https://admin.raguiar.pt` deve mostrar a página de login.
+Vai ao browser: `https://admin.raguiar.pt` deve mostrar a página de login.
 
-## Passo 8 — Criar primeiro utilizador
+Login com `ruipaguiar@gmail.com` / `Password123!` — **muda esta password depois do primeiro login** (quando houver UI de settings ou diretamente na BD).
 
-Como ainda não tens UI de registo, cria diretamente na BD:
-
-```bash
-# Gera hash BCrypt da password (instala bcrypt-cli ou usa Node):
-docker run --rm -e PASSWORD='a-tua-password' node:22-alpine \
-  sh -c 'npm i -g bcryptjs-cli >/dev/null 2>&1; echo "import bcrypt from \"bcryptjs\"; console.log(bcrypt.hashSync(process.env.PASSWORD, 12));" | node --input-type=module'
-```
-
-Inserir na BD:
-
-```bash
-docker exec -it postgres-server psql -U admindashboard_app -d admindashboard_db
-```
-
-```sql
-INSERT INTO "Users" ("Id", "Email", "PasswordHash", "DisplayName", "CreatedAt", "IsActive", "Role")
-VALUES (gen_random_uuid(), 'eu@raguiar.pt', '<hash-bcrypt-aqui>', 'Ricardo', NOW(), true, 'Admin');
-```
-
-(Este passo só é necessário enquanto a UI de registo não existir — Semana 2.)
+---
 
 ## Comandos úteis
 
@@ -167,15 +139,15 @@ docker compose up -d --build api
 docker compose down
 
 # Backup da BD
-docker exec postgres-server pg_dump -U admindashboard_app -d admindashboard_db > backup-$(date +%Y%m%d).sql
+docker exec postgres-server pg_dump -U printpro -d AdmindashBoard > backup-$(date +%Y%m%d).sql
 
 # Restore
-docker exec -i postgres-server psql -U admindashboard_app -d admindashboard_db < backup.sql
+docker exec -i postgres-server psql -U printpro -d AdmindashBoard < backup.sql
 ```
 
-## Atualizações
+---
 
-Quando quiseres deploy de uma nova versão:
+## Atualizações
 
 ```bash
 cd ~/projetos/AdminDashboard
@@ -183,14 +155,16 @@ git pull
 docker compose --env-file .env.prod up -d --build
 ```
 
+As novas migrations são aplicadas automaticamente na startup.
+
+---
+
 ## Troubleshooting
 
-**API não arranca:** ver logs com `docker compose logs api`. Causa mais comum: connection string errada (host, password, BD).
+**API não arranca:** `docker compose logs api`. Causa mais comum: connection string errada.
 
-**Web não comunica com API:** verifica `API_URL_INTERNAL` em `docker-compose.yml` (deve ser `http://api:8080`). Containers têm de estar na mesma rede `admin-net`.
+**Web não comunica com API:** verifica `API_URL_INTERNAL` em `docker-compose.yml` (deve ser `http://api:8080`).
 
-**`postgres-server` não acessível:** `docker network inspect melresin-net` deve listar tanto `postgres-server` como `admin-api`.
+**Postgres não acessível:** `docker network inspect melresin-net` deve listar `postgres-server` e `admin-api`.
 
-**Cloudflare 502:** o serviço local está parado ou em porta errada. `docker compose ps` para verificar.
-
-**Cloudflare 1014 (CNAME flattening):** tens de usar tunnel, não CNAME — confirma que adicionaste como "Public Hostname" do tunnel.
+**Cloudflare 502:** serviço local parado ou porta errada. `docker compose ps` para verificar.

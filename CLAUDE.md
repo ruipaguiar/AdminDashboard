@@ -50,7 +50,7 @@ A escolha de ter backend separado em C# (em vez de tudo em Next.js full-stack) f
 | **Backend** | ASP.NET Core | **.NET 10** (LTS, suporte até Nov 2028) |
 | **Frontend** | Next.js + React + TypeScript | **Next.js 16.2 + React 19** |
 | **Styling** | Tailwind CSS + shadcn/ui + Tremor | Tailwind 4 |
-| **Auth (frontend)** | NextAuth (Auth.js v5) | beta 25 |
+| **Auth (frontend)** | NextAuth (Auth.js v5) | beta.31 |
 | **Auth (backend)** | JWT Bearer | nativo .NET |
 | **Base de dados** | PostgreSQL | **18** (existente, partilhado) |
 | **ORM** | Entity Framework Core + Npgsql | 10 |
@@ -79,7 +79,7 @@ A API C# é **a fonte de verdade**. Tanto o frontend Next.js como a futura app m
 
 ### 4.2 — Tudo num subdomínio único (não `admin.` + `api.`)
 
-Considerei separar em `admin.raguiar.pt` + `api.raguiar.pt`, mas decidi **manter tudo em `admin.raguiar.pt`** com a API em `/api/*`. Razão: evita CORS, cookies cross-origin, e mais um Cloudflare Tunnel. Quando a app mobile vier, vai bater em `admin.raguiar.pt/api/*` sem problemas.
+Decidi **manter tudo em `admin.raguiar.pt`** com a API em `/api/*`. Razão: evita CORS, cookies cross-origin, e mais um Cloudflare Tunnel. Quando a app mobile vier, vai bater em `admin.raguiar.pt/api/*` sem problemas.
 
 ### 4.3 — Sem reverse proxy interno (Caddy/Nginx)
 
@@ -87,11 +87,17 @@ O **Next.js faz o routing** via `rewrites` no `next.config.ts`: pedidos para `/a
 
 ### 4.4 — PostgreSQL existente reutilizado
 
-Não vou criar Postgres novo — vou usar o `postgres-server` que já corre na rede `melresin-net`. Para isolamento:
+Reutilizo o servidor Postgres que já existe. Não há container Postgres dedicado neste compose.
 
-- Base de dados **dedicada**: `admindashboard_db`
-- User **dedicado**: `admindashboard_app` (sem privilégios noutras BDs)
-- Permissões só sobre a sua BD
+**Desenvolvimento local:**
+- Host: `192.168.68.115` (IP do servidor na rede local)
+- Base de dados: `AdmindashBoard`
+- User: `printpro`
+- Configurado em `appsettings.Development.json` (gitignored)
+
+**Produção (Docker):**
+- Container `postgres-server` na rede `melresin-net`
+- Credenciais configuradas via `.env.prod`
 - A `admin-api` junta-se à rede `melresin-net` para chegar ao Postgres
 
 ### 4.5 — Arquitetura modular
@@ -113,7 +119,7 @@ AdminDashboard.Infra  → Implementações concretas (EF, Binance, Claude, Hangf
 
 ### 4.7 — Segurança das ports
 
-Todas as ports do Docker usam prefixo `127.0.0.1:` — só o próprio servidor (e portanto o `cloudflared`) consegue acedê-las. Mesmo que o firewall esteja mal configurado, ninguém de fora chega aos containers.
+Todas as ports do Docker usam prefixo `127.0.0.1:` — só o próprio servidor (e portanto o `cloudflared`) consegue acedê-las.
 
 ### 4.8 — Binance: APENAS read-only
 
@@ -123,6 +129,10 @@ API keys da Binance criadas com **somente** "Enable Reading" ativo. Nunca Withdr
 
 No MelResin tenho `storefront` (público) e `backoffice` (admin). Aqui é diferente: **um único frontend** com login obrigatório. Não há "área pública".
 
+### 4.10 — Next.js 16.2: proxy.ts em vez de middleware.ts
+
+No Next.js 16.2, o ficheiro de middleware foi renomeado de `middleware.ts` para `proxy.ts`. O ficheiro de proteção de rotas é `src/proxy.ts`.
+
 ---
 
 ## 5. Infraestrutura existente que vou reutilizar
@@ -130,26 +140,16 @@ No MelResin tenho `storefront` (público) e `backoffice` (admin). Aqui é difere
 ### 5.1 — Postgres
 
 ```
-Container:  postgres-server
+Servidor:   192.168.68.115 (rede local) / postgres-server (Docker produção)
 Versão:     PostgreSQL 18.1
-Rede:       melresin-net (e bridge default)
-```
-
-Verificado com:
-```bash
-docker exec postgres-server psql --version
-# psql (PostgreSQL) 18.1 (Debian 18.1-1.pgdg13+2)
-
-docker network ls
-# bridge
-# host
-# melresin-net
-# none
+BD dev:     AdmindashBoard
+User dev:   printpro
+Rede prod:  melresin-net
 ```
 
 ### 5.2 — Cloudflare Tunnel
 
-Já está configurado e a correr (usado por outros projetos). Para adicionar o admin é só ir ao painel Zero Trust → Networks → Tunnels → adicionar Public Hostname novo:
+Já está configurado e a correr (usado por outros projetos). Para adicionar o admin:
 
 ```
 Subdomain: admin
@@ -161,19 +161,12 @@ Não criar daemon `cloudflared` novo.
 
 ### 5.3 — Padrão de docker-compose existente (do MelResin)
 
-Sigo o mesmo padrão estilístico do MelResin (que está em produção e funciona):
-
 - `image:` nomeada (`admin-api:latest`)
 - `env_file: .env.prod` para valores reais
 - `environment:` para documentar variáveis
-- `networks: external: true` (rede gerida fora do compose)
-- Containers usam `restart: unless-stopped`
-
-**Diferenças vs MelResin:**
-
+- `networks: external: true`
+- `restart: unless-stopped`
 - **Ports com prefix `127.0.0.1:`** (segurança extra)
-- Frontend único em vez de storefront + backoffice
-- Postgres é externo (reutilizado), não num container deste compose
 
 ---
 
@@ -181,78 +174,84 @@ Sigo o mesmo padrão estilístico do MelResin (que está em produção e funcion
 
 ```
 AdminDashboard/
-├── CLAUDE.md                    ← este ficheiro
-├── README.md                    ← visão geral do projeto
-├── docker-compose.yml           ← orquestração (api + web)
-├── .env.example                 ← template das variáveis
+├── CLAUDE.md
+├── README.md
+├── docker-compose.yml
+├── .env.example
 ├── .env.prod                    ← valores reais (NÃO em git)
 ├── .gitignore
 │
-├── backend/                     ← API ASP.NET Core .NET 10
-│   ├── Dockerfile               ← multi-stage, user não-root, healthcheck
+├── backend/
+│   ├── Dockerfile
 │   ├── AdminDashboard.sln
 │   └── src/
-│       ├── AdminDashboard.Api/        ← Web layer
-│       │   ├── Program.cs             ← JWT, Serilog, Scalar OpenAPI
+│       ├── AdminDashboard.Api/
+│       │   ├── Program.cs             ← JWT, Serilog, Scalar, FluentValidation
 │       │   ├── appsettings.json
-│       │   ├── Controllers/           ← HealthController e outros transversais
-│       │   ├── Modules/               ← Auth, Crypto, News, Chat, Users
-│       │   ├── Common/                ← middleware, filtros, helpers
-│       │   ├── Migrations/            ← EF Core migrations
-│       │   └── Properties/launchSettings.json
-│       ├── AdminDashboard.Core/       ← Domínio puro
+│       │   ├── appsettings.Development.json  ← credenciais locais (NÃO em git)
+│       │   ├── Controllers/
+│       │   │   └── HealthController.cs
+│       │   ├── Modules/
+│       │   │   └── Auth/
+│       │   │       └── AuthController.cs     ← POST /login, GET /me
+│       │   └── Common/
+│       │       └── Middleware/
+│       │           └── ExceptionHandlingMiddleware.cs
+│       ├── AdminDashboard.Core/
+│       │   ├── DTOs/Auth/             ← LoginRequest, LoginResponse, UserDto
 │       │   ├── Entities/              ← User, AlertRule, PriceSnapshot
-│       │   ├── Interfaces/            ← IBinanceService, IClaudeService, etc.
-│       │   └── DTOs/
-│       └── AdminDashboard.Infra/      ← Implementações concretas
-│           ├── Persistence/           ← AppDbContext, configurations
-│           ├── External/              ← BinanceService, ClaudeService, NewsAggregator
-│           └── Jobs/                  ← Hangfire jobs
+│       │   ├── Interfaces/            ← IAuthService (IBinanceService, etc. a criar)
+│       │   └── Validators/            ← LoginRequestValidator
+│       └── AdminDashboard.Infra/
+│           ├── Persistence/
+│           │   ├── AppDbContext.cs
+│           │   ├── Configurations/    ← UserConfiguration, AlertRuleConfiguration, etc.
+│           │   └── Migrations/        ← InitialCreate, SeedDefaultAdmin
+│           └── External/
+│               └── AuthService.cs    ← BCrypt + JWT
 │
 ├── apps/
-│   └── web/                     ← Frontend Next.js 16.2
-│       ├── Dockerfile           ← multi-stage standalone, user não-root
+│   └── web/
+│       ├── Dockerfile
 │       ├── package.json
-│       ├── next.config.ts       ← rewrite /api/* → API interna
-│       ├── tsconfig.json
-│       ├── postcss.config.mjs
+│       ├── next.config.ts             ← rewrite /api/* → API, security headers
 │       └── src/
+│           ├── proxy.ts               ← proteção de rotas (Next.js 16.2)
 │           ├── app/
-│           │   ├── layout.tsx
-│           │   ├── page.tsx           ← redirect para /login ou /crypto
-│           │   ├── globals.css        ← Tailwind 4 + variáveis shadcn
-│           │   ├── (auth)/
-│           │   │   ├── login/
-│           │   │   └── register/
-│           │   ├── (dashboard)/
-│           │   │   ├── layout.tsx     ← sidebar + main
-│           │   │   ├── crypto/
-│           │   │   ├── news/
-│           │   │   ├── chat/
-│           │   │   └── settings/
-│           │   └── api/               ← API routes do Next (NextAuth callbacks)
+│           │   ├── layout.tsx         ← ThemeProvider + SessionProvider
+│           │   ├── page.tsx           ← redirect /login ou /crypto
+│           │   ├── globals.css
+│           │   ├── api/auth/[...nextauth]/route.ts
+│           │   ├── (auth)/login/page.tsx
+│           │   └── (dashboard)/
+│           │       ├── layout.tsx     ← auth() server-side check
+│           │       ├── crypto/page.tsx
+│           │       ├── news/page.tsx
+│           │       ├── chat/page.tsx
+│           │       └── settings/page.tsx
 │           ├── components/
 │           │   ├── ui/                ← componentes shadcn
-│           │   ├── layout/            ← Sidebar, Header, ThemeProvider
-│           │   └── modules/           ← componentes específicos por módulo
+│           │   └── layout/
+│           │       ├── Sidebar.tsx
+│           │       ├── Header.tsx     ← useSession, signOut
+│           │       ├── ThemeProvider.tsx
+│           │       ├── ThemeToggle.tsx
+│           │       └── SessionProvider.tsx
 │           ├── lib/
-│           │   ├── api.ts             ← cliente axios
-│           │   ├── utils.ts           ← cn() helper
-│           │   └── auth.ts            ← config NextAuth (a criar)
-│           ├── hooks/
+│           │   ├── api.ts             ← axios + interceptor JWT
+│           │   ├── auth.ts            ← NextAuth v5 config
+│           │   └── utils.ts
 │           └── types/
+│               └── next-auth.d.ts    ← augmentação de tipos
 │
 ├── docs/
-│   ├── ROADMAP.md               ← plano semana-a-semana
-│   ├── SECURITY.md              ← checklist de segurança multi-camada
-│   ├── DEPLOY.md                ← passos exatos do deploy no servidor
-│   └── ARCHITECTURE.md          ← decisões e diagramas
+│   ├── ROADMAP.md
+│   ├── SECURITY.md
+│   ├── DEPLOY.md
+│   └── ARCHITECTURE.md
 │
-├── prompts/                     ← prompts prontos para Claude Code
+├── prompts/                     ← prompts para Claude Code (módulos futuros)
 │   ├── 00-overview.md
-│   ├── 01-setup-api.md
-│   ├── 02-setup-web.md
-│   ├── 03-auth-jwt.md           (a criar)
 │   ├── 04-binance-module.md     (a criar)
 │   ├── 05-alerts-system.md      (a criar)
 │   ├── 06-news-module.md        (a criar)
@@ -260,21 +259,21 @@ AdminDashboard/
 │   └── 08-design-system.md      (a criar)
 │
 └── scripts/
-    ├── setup-db.sql             ← cria BD e user no Postgres existente
-    └── generate-secrets.sh      ← gera JWT secrets
+    ├── setup-db.sql             ← referência para setup em produção
+    └── generate-secrets.sh
 ```
 
 ---
 
 ## 7. Roadmap
 
-### Semana 1 — Fundações
-Setup base, primeira migration, "Hello World" web ↔ api ↔ db.
-**Crítério:** `https://admin.raguiar.pt/api/health/ping` devolve `{"message":"pong"}`.
+### ✅ Semana 1 — Fundações
+Setup base, migrations, health check, Docker builds.
+`GET /api/health/ping` → `{"message":"pong"}`. Build frontend OK.
 
-### Semana 2 — Auth
-JWT + NextAuth + login obrigatório em rotas `(dashboard)`.
-**Critério:** Tentar aceder a `/crypto` sem login redireciona para `/login`.
+### ✅ Semana 2 — Auth
+JWT + NextAuth v5 + login obrigatório. BCrypt passwords. Utilizador admin criado via migration seed.
+`/crypto` sem login → redireciona para `/login`.
 
 ### Semana 3 — Módulo Crypto
 Integração Binance read-only, portfolio na UI, gráficos com Tremor.
@@ -313,12 +312,12 @@ APP_ENV=production
 API_PORT=5001
 WEB_PORT=3003
 
-# Postgres (existente)
+# Postgres
 POSTGRES_HOST=postgres-server
 POSTGRES_PORT=5432
-POSTGRES_DB=admindashboard_db
-POSTGRES_USER=admindashboard_app
-POSTGRES_PASSWORD=<openssl rand -base64 32>
+POSTGRES_DB=AdmindashBoard
+POSTGRES_USER=printpro
+POSTGRES_PASSWORD=<password>
 
 # JWT
 JWT_SECRET=<openssl rand -base64 64>
@@ -342,6 +341,8 @@ ANTHROPIC_MODEL=claude-opus-4-7
 CORS_ALLOWED_ORIGINS=https://admin.raguiar.pt,http://localhost:3003
 ```
 
+Para **desenvolvimento local**, as credenciais estão em `appsettings.Development.json` (gitignored).
+
 ---
 
 ## 9. Convenções de código (importantes para Claude)
@@ -353,7 +354,7 @@ CORS_ALLOWED_ORIGINS=https://admin.raguiar.pt,http://localhost:3003
 - **`Core` NÃO depende de EF, Binance, Anthropic** — só DTOs, entities, interfaces
 - **Toda a comunicação externa** (HTTP, BD, APIs) fica em `Infra`
 - **Logs sempre via `ILogger<T>`** (Serilog por baixo)
-- **Tratamento de erros** via middleware global, não try/catch em cada controller
+- **Tratamento de erros** via `ExceptionHandlingMiddleware`, não try/catch em cada controller
 - **Validação** com FluentValidation (não data annotations)
 - **Naming:** PascalCase para tipos/membros públicos, camelCase para locais/parâmetros
 - **Records** quando o tipo é imutável (DTOs, value objects)
@@ -367,6 +368,7 @@ CORS_ALLOWED_ORIGINS=https://admin.raguiar.pt,http://localhost:3003
 - **Tailwind 4** usa `@import "tailwindcss"` (não `@tailwind base/components/utilities`)
 - **Naming:** camelCase para funções/variáveis, PascalCase para componentes/types
 - **Imports absolutos** com `@/` em vez de `../../../`
+- **Next.js 16.2:** ficheiro de proxy é `src/proxy.ts` (não `middleware.ts`)
 
 ### Geral
 
@@ -380,19 +382,17 @@ CORS_ALLOWED_ORIGINS=https://admin.raguiar.pt,http://localhost:3003
 
 A primeira coisa é **API keys da Binance APENAS com Reading ativo**. Nunca, em nenhuma circunstância, ativar Withdrawals ou Trading sem confirmação explícita minha.
 
-A segunda é **secrets nunca em código**. Tudo via `.env.prod` que não está em git. `.gitignore` já bloqueia.
+A segunda é **secrets nunca em código**. Tudo via `.env.prod` que não está em git. `appsettings.Development.json` também está no `.gitignore`.
 
-A terceira é **user Postgres dedicado** com permissões só na sua BD. Nunca usar o user `postgres` (superuser) na aplicação.
+A terceira é **passwords com BCrypt** (work factor 12+). Nunca SHA, MD5, ou hashes simples.
 
-A quarta é **passwords com BCrypt** (work factor 12+). Nunca SHA, MD5, ou hashes simples.
+A quarta é **JWT secret rotacionável** — pelo menos 64 bytes random.
 
-A quinta é **JWT secret rotacionável** — pelo menos 64 bytes random.
+A quinta é **headers de segurança** em todas as respostas (`X-Frame-Options`, `X-Content-Type-Options`, etc.) — configurados no `next.config.ts`.
 
-A sexta é **headers de segurança** em todas as respostas (`X-Frame-Options`, `X-Content-Type-Options`, etc.).
+A sexta é **ports só em `127.0.0.1`** no docker-compose. Nunca expor diretamente à rede.
 
-A sétima é **ports só em `127.0.0.1`** no docker-compose. Nunca expor diretamente à rede.
-
-A oitava é **HTTPS obrigatório** em produção (Cloudflare trata).
+A sétima é **HTTPS obrigatório** em produção (Cloudflare trata).
 
 ---
 
@@ -423,9 +423,16 @@ Direto, técnico, sem encher linguiça. Posso aceitar discordância se for funda
 
 ## 12. Estado atual
 
-A estrutura completa do projeto já está criada (todos os ficheiros base, Dockerfiles, `Program.cs`, entities, layouts, páginas placeholder). Falta **implementar** as funcionalidades fase a fase.
+**Semanas 1 e 2 completas e a funcionar.**
 
-**Próximo passo:** Semana 1 do roadmap — usar `prompts/01-setup-api.md` e `prompts/02-setup-web.md` para finalizar o setup e ter o "Hello World" a correr.
+O que está implementado:
+- API .NET 10 com HealthController, AuthController, ExceptionHandlingMiddleware
+- EF Core com migrations: `InitialCreate` (tabelas) + `SeedDefaultAdmin` (user `ruipaguiar@gmail.com` / `Password123!`)
+- Frontend Next.js 16.2 com shadcn/ui, Tailwind 4, dark mode
+- Auth completo: NextAuth v5 + JWT Bearer, login funcional, proteção de rotas via `proxy.ts`
+- Utilizador admin criado via migration seed (aplicado automaticamente na startup)
+
+**Próximo passo:** Semana 3 — Módulo Crypto. Criar API keys Binance (apenas Reading), implementar `BinanceService` em `Infra`, endpoints `/api/crypto/portfolio` e `/api/crypto/prices`, UI com Tremor.
 
 ---
 

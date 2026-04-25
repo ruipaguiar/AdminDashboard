@@ -5,13 +5,14 @@ const nextConfig: NextConfig = {
   output: "standalone",
 
   // Rewrites: /api/* (browser) → API C# (interno na rede Docker)
-  // Isto evita CORS, JS expostos, e mantém autenticação por cookies simples.
+  // /api/auth/* fica excluído — é tratado pelo Next.js (NextAuth route handler)
   async rewrites() {
     const apiUrl = process.env.API_URL_INTERNAL || "http://api:8080";
     return [
       {
-        source: "/api/:path*",
-        destination: `${apiUrl}/api/:path*`,
+        // Regex negative lookahead: captura tudo em /api/* EXCEPTO /api/auth/*
+        source: "/api/((?!auth/).*)",
+        destination: `${apiUrl}/api/$1`,
       },
     ];
   },

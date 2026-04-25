@@ -36,6 +36,7 @@ project.lock.json
 # ──────────────────────────────────────────────────────────
 node_modules/
 .next/
+.env.local
 out/
 build/
 dist/

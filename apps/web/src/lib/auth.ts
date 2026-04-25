@@ -8,6 +8,11 @@ const loginSchema = z.object({
 });
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
+  secret: process.env.AUTH_SECRET,
+
+  // Necessário em desenvolvimento e quando não há HTTPS (Cloudflare trata em prod)
+  trustHost: true,
+
   providers: [
     Credentials({
       credentials: {
@@ -18,11 +23,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const parsed = loginSchema.safeParse(credentials);
         if (!parsed.success) return null;
 
-        // Em produção bate em http://api:8080 (rede Docker interna).
-        // Em desenvolvimento local bate no localhost.
         const apiUrl =
           process.env.API_URL_INTERNAL ||
-          process.env.NEXT_PUBLIC_API_URL ||
           "http://localhost:5001";
 
         try {
@@ -74,6 +76,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
 
   pages: {
     signIn: "/login",
+    error: "/login",
   },
 
   session: {

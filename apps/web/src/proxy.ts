@@ -1,29 +1,32 @@
-import { auth } from "@/lib/auth";
-import { NextResponse } from "next/server";
+import { getToken } from "next-auth/jwt";
+import { type NextRequest, NextResponse } from "next/server";
 
-export default auth((req) => {
-  const isLoggedIn = !!req.auth;
+export default async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // Rotas de auth do NextAuth — nunca redirecionar
+  // Rotas do NextAuth nunca são bloqueadas
   if (pathname.startsWith("/api/auth")) return NextResponse.next();
 
+  const token = await getToken({
+    req,
+    secret: process.env.AUTH_SECRET,
+  });
+
+  const isLoggedIn = !!token;
   const isLoginPage = pathname === "/login";
 
   if (!isLoggedIn && !isLoginPage) {
-    const loginUrl = new URL("/login", req.url);
-    return NextResponse.redirect(loginUrl);
+    return NextResponse.redirect(new URL("/login", req.url));
   }
 
   if (isLoggedIn && isLoginPage) {
-    const cryptoUrl = new URL("/crypto", req.url);
-    return NextResponse.redirect(cryptoUrl);
+    return NextResponse.redirect(new URL("/crypto", req.url));
   }
 
   return NextResponse.next();
-});
+}
 
 export const config = {
-  // Aplica o middleware a tudo exceto assets estáticos
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
+  // Exclui assets estáticos E rotas do NextAuth (api/auth/*) para não interferir
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|api/auth).*)"],
 };
