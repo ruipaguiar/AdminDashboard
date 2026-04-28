@@ -1,15 +1,9 @@
 import axios from "axios";
-import { getSession } from "next-auth/react";
+import { getSession, signOut } from "next-auth/react";
 
-/**
- * Cliente HTTP para chamadas client-side à API.
- * O Next.js faz rewrite de /api/* → API C# (via next.config.ts).
- */
 export const api = axios.create({
   baseURL: "/api",
-  headers: {
-    "Content-Type": "application/json",
-  },
+  headers: { "Content-Type": "application/json" },
 });
 
 api.interceptors.request.use(async (config) => {
@@ -22,9 +16,10 @@ api.interceptors.request.use(async (config) => {
 
 api.interceptors.response.use(
   (response) => response,
-  (error) => {
+  async (error) => {
     if (error.response?.status === 401) {
-      window.location.href = "/login";
+      // JWT expirado ou inválido — limpar sessão NextAuth e forçar novo login
+      await signOut({ callbackUrl: "/login" });
     }
     return Promise.reject(error);
   }

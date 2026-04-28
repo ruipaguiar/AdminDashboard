@@ -4,8 +4,8 @@ import { type NextRequest, NextResponse } from "next/server";
 export default async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // Rotas do NextAuth nunca são bloqueadas
-  if (pathname.startsWith("/api/auth")) return NextResponse.next();
+  // Rotas do NextAuth nunca são bloqueadas (/auth/* em vez de /api/auth/*)
+  if (pathname.startsWith("/auth")) return NextResponse.next();
 
   const token = await getToken({
     req,

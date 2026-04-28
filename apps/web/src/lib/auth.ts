@@ -9,9 +9,10 @@ const loginSchema = z.object({
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   secret: process.env.AUTH_SECRET,
-
-  // Necessário em desenvolvimento e quando não há HTTPS (Cloudflare trata em prod)
   trustHost: true,
+
+  // Mover rotas de /api/auth/* para /auth/* evita conflito com o rewrite /api/* → .NET
+  basePath: "/auth",
 
   providers: [
     Credentials({
@@ -63,6 +64,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         token.displayName = user.displayName;
         token.expiresAt = user.expiresAt;
       }
+
+      // Se o JWT da API expirou, limpar o token para forçar novo login
+      if (token.expiresAt && Date.now() > (token.expiresAt as number)) {
+        return { ...token, accessToken: "" };
+      }
+
       return token;
     },
     session({ session, token }) {

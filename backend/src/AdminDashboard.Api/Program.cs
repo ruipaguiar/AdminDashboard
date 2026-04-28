@@ -4,6 +4,8 @@ using AdminDashboard.Core.Interfaces;
 using AdminDashboard.Core.Validators;
 using AdminDashboard.Infra.External;
 using AdminDashboard.Infra.Persistence;
+using Binance.Net.Clients;
+using CryptoExchange.Net.Authentication;
 using FluentValidation;
 using FluentValidation.AspNetCore;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -77,7 +79,21 @@ builder.Services.AddValidatorsFromAssemblyContaining<LoginRequestValidator>();
 // Módulo Auth
 builder.Services.AddScoped<IAuthService, AuthService>();
 
-// TODO: registar serviços dos módulos (Crypto, News, Chat) — ver prompts/
+// Cache em memória (partilhado por todos os módulos)
+builder.Services.AddMemoryCache();
+
+// Módulo Crypto — Binance.Net
+var binanceApiKey = builder.Configuration["Binance:ApiKey"] ?? "";
+var binanceApiSecret = builder.Configuration["Binance:ApiSecret"] ?? "";
+
+BinanceRestClient.SetDefaultOptions(options =>
+{
+    if (!string.IsNullOrWhiteSpace(binanceApiKey))
+        options.ApiCredentials = new ApiCredentials(binanceApiKey, binanceApiSecret);
+});
+
+builder.Services.AddScoped<Binance.Net.Interfaces.Clients.IBinanceRestClient>(_ => new BinanceRestClient());
+builder.Services.AddScoped<IBinanceService, BinanceService>();
 
 var app = builder.Build();
 

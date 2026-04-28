@@ -4,15 +4,14 @@ const nextConfig: NextConfig = {
   // Standalone build para imagens Docker pequenas
   output: "standalone",
 
-  // Rewrites: /api/* (browser) → API C# (interno na rede Docker)
-  // /api/auth/* fica excluído — é tratado pelo Next.js (NextAuth route handler)
+  // Rewrites: /api/* → API C# (Docker interno)
+  // NextAuth usa /auth/* — sem conflito com este rewrite
   async rewrites() {
     const apiUrl = process.env.API_URL_INTERNAL || "http://api:8080";
     return [
       {
-        // Regex negative lookahead: captura tudo em /api/* EXCEPTO /api/auth/*
-        source: "/api/((?!auth/).*)",
-        destination: `${apiUrl}/api/$1`,
+        source: "/api/:path*",
+        destination: `${apiUrl}/api/:path*`,
       },
     ];
   },
